@@ -1,0 +1,14 @@
+PORT=8080
+DATABASE_URL="file:./dev.db"
+JWT_SECRET="your-secret-here"
+
+
+EMAIL_HOST="smtp.gmail.com"
+EMAIL_PORT="587"
+EMAIL_SECURE=true
+EMAIL_USER="aamhamdi110101@gmail.com"
+EMAIL_PASS="kaqf dwsd xwcj jpox"
+EMAIL_FROM_NAME="music room"
+
+
+JAMENDO_CLIENT_ID="ab5f3bb3"

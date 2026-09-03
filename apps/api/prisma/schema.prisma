@@ -1,0 +1,347 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                        String    @id @default(uuid())
+  email                     String    @unique
+  username                  String    @unique
+  password                  String
+  googleId                  String?   @unique
+  facebookId                String?   @unique
+  isActivated               Boolean   @default(false)
+  emailVerificationToken    String?
+  emailVerificationExpires  DateTime?
+  resetPasswordToken        String?
+  resetPasswordTokenExpires DateTime?
+  createdAt                 DateTime  @default(now())
+  profile                   Profile?
+
+  // Relations
+  events       Event[]       @relation("EventCreator")
+  votes        TrackVote[]   @relation("UserVotes")
+  eventMembers EventMember[] @relation("UserEvents")
+  invites      EventInvite[] @relation("UserInvites")
+
+  playlists            Playlist[]           @relation("PlaylistOwner")
+  playlistMembers      PlaylistMember[]      @relation("UserPlaylists")
+  playlistInvitations  PlaylistInvitation[]  @relation("UserPlaylistInvites")
+
+  sentFriendRequests     FriendRequest[] @relation("FriendRequestSender")
+  receivedFriendRequests FriendRequest[] @relation("FriendRequestReceiver")
+  actionLogs              ActionLog[]      @relation("UserActionLogs")
+}
+
+model Profile {
+  id               String       @id @default(uuid())
+  userId           String       @unique
+  firstName        String?
+  lastName         String?
+  avatarUrl        String?
+  createdAt        DateTime     @default(now())
+  subscription     Subscription @default(FREE)
+  searchPreference String?      @default("{}")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([userId])
+  @@map("profiles")
+}
+
+model Event {
+  id                    String       @id @default(uuid())
+  title                 String
+  createdById           String
+  latitude              Float?
+  longitude             Float?
+  radius                Float?       @default(100)
+  status                EventStatus  @default(CREATED)
+  createdAt             DateTime     @default(now())
+  privacy               EventPrivacy @default(PUBLIC)
+  licence               LicenceType  @default(FREE)
+  currentTrackId        String?
+  currentTrackStartTime DateTime?
+  round                 Int          @default(0)
+
+  geoVotingStart DateTime?
+  geoVotingEnd   DateTime?
+
+  // Relations
+  currentTrack Track?        @relation(fields: [currentTrackId], references: [id], onDelete: SetNull, name: "CurrentTrackEvent")
+  createdBy    User          @relation(fields: [createdById], references: [id], onDelete: Cascade, name: "EventCreator")
+  votes        TrackVote[]   @relation("EventVotes")
+  members      EventMember[] @relation("EventMembers")
+  invites      EventInvite[] @relation("EventInvites")
+  tracks       EventTrack[]  @relation("EventTracks")
+
+  @@index([id])
+  @@map("events")
+}
+
+model EventMember {
+  id           String   @id @default(uuid())
+  eventId      String
+  userId       String
+  joinedAt     DateTime @default(now())
+  invitationId String?
+
+  // Relations
+  event  Event        @relation(fields: [eventId], references: [id], onDelete: Cascade, name: "EventMembers")
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade, name: "UserEvents")
+  invite EventInvite? @relation(fields: [invitationId], references: [id], onDelete: Cascade, name: "EventInvites")
+
+  @@index([eventId])
+  @@index([userId])
+  @@map("eventMembers")
+}
+
+model EventInvite {
+  id        String       @id @default(uuid())
+  eventId   String
+  userId    String
+  inviteKey String       @unique
+  expiresAt DateTime
+  createdAt DateTime     @default(now())
+  status    InviteStatus @default(PENDING)
+
+  // relations
+  event        Event         @relation(fields: [eventId], references: [id], onDelete: Cascade, name: "EventInvites")
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade, name: "UserInvites")
+  eventMembers EventMember[] @relation("EventInvites")
+
+  @@index([eventId])
+  @@index([userId])
+  @@map("eventInvites")
+}
+
+model Track {
+  id        String   @id @default(uuid())
+  title     String
+  artist    String
+  album     String?
+  imageUrl  String?
+  duration  Int
+  path      String
+  url       String?
+  source    String   @default("YOUTUBE")
+  createdAt DateTime @default(now())
+
+  // Relations
+  currentEvents  Event[]         @relation("CurrentTrackEvent")
+  eventTracks    EventTrack[]    @relation("TrackEvent")
+  playlistTracks PlaylistTrack[] @relation("TrackPlaylists")
+
+  @@unique([title, artist, source])
+  @@index([id])
+  @@map("tracks")
+}
+
+model Playlist {
+  id          String           @id @default(uuid())
+  name        String
+  description String?
+  coverUrl    String?
+  visibility  PlaylistVisibility @default(PUBLIC)
+  ownerId     String
+  version     Int              @default(1)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relations
+  owner       User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade, name: "PlaylistOwner")
+  members     PlaylistMember[]     @relation("PlaylistMembers")
+  tracks      PlaylistTrack[]      @relation("PlaylistTracks")
+  license     PlaylistLicense?     @relation("PlaylistLicense")
+  invitations PlaylistInvitation[] @relation("PlaylistInvitations")
+
+  @@unique([ownerId, name])
+  @@index([id])
+  @@index([ownerId])
+  @@map("playlists")
+}
+
+model PlaylistMember {
+  id         String   @id @default(uuid())
+  playlistId String
+  userId     String
+  joinedAt   DateTime @default(now())
+
+  // Relations
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade, name: "PlaylistMembers")
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade, name: "UserPlaylists")
+
+  @@unique([playlistId, userId])
+  @@index([playlistId])
+  @@index([userId])
+  @@map("playlistMembers")
+}
+
+model PlaylistTrack {
+  id         String   @id @default(uuid())
+  playlistId String
+  trackId    String
+  position   Int
+  createdAt  DateTime @default(now())
+
+  // Relations
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade, name: "PlaylistTracks")
+  track    Track    @relation(fields: [trackId], references: [id], onDelete: Cascade, name: "TrackPlaylists")
+
+  @@unique([playlistId, trackId])
+  @@index([playlistId])
+  @@index([trackId])
+  @@map("playlistTracks")
+}
+
+model PlaylistLicense {
+  id         String            @id @default(uuid())
+  playlistId String            @unique
+  editPolicy PlaylistEditPolicy @default(EVERYONE)
+  isEnabled  Boolean           @default(true)
+
+  // Relations
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade, name: "PlaylistLicense")
+
+  @@map("playlistLicenses")
+}
+
+model PlaylistInvitation {
+  id         String   @id @default(uuid())
+  playlistId String
+  userId     String
+  createdAt  DateTime @default(now())
+
+  // Relations
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade, name: "PlaylistInvitations")
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade, name: "UserPlaylistInvites")
+
+  @@unique([playlistId, userId])
+  @@index([playlistId])
+  @@index([userId])
+  @@map("playlistInvitations")
+}
+
+model EventTrack {
+  eventId String
+  trackId String
+  played  Boolean @default(false)
+  order   Int?    @default(0)
+
+  // Relations
+  event Event       @relation(fields: [eventId], references: [id], onDelete: Cascade, name: "EventTracks")
+  track Track       @relation(fields: [trackId], references: [id], onDelete: Cascade, name: "TrackEvent")
+  votes TrackVote[] @relation("TrackVotes")
+
+  @@id([eventId, trackId])
+  @@index([eventId, trackId])
+  @@map("eventTracks")
+}
+
+model TrackVote {
+  id             String   @id @default(uuid())
+  trackId        String
+  eventId        String
+  userId         String
+  latitude       Float
+  longitude      Float
+  isWithinRadius Boolean
+  createdAt      DateTime @default(now())
+  round          Int      @default(0)
+
+  // Relations
+  track EventTrack @relation(fields: [eventId, trackId], references: [eventId, trackId], onDelete: Cascade, name: "TrackVotes")
+  event Event      @relation(fields: [eventId], references: [id], onDelete: Cascade, name: "EventVotes")
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade, name: "UserVotes")
+
+  @@index([trackId])
+  @@index([eventId])
+  @@index([userId])
+  @@map("trackVotes")
+}
+
+model FriendRequest {
+  id         String              @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     FriendRequestStatus @default(PENDING)
+  createdAt  DateTime            @default(now())
+
+  // Relations
+  sender   User @relation(fields: [senderId], references: [id], onDelete: Cascade, name: "FriendRequestSender")
+  receiver User @relation(fields: [receiverId], references: [id], onDelete: Cascade, name: "FriendRequestReceiver")
+
+  @@unique([senderId, receiverId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@map("friendRequests")
+}
+
+model ActionLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  method     String
+  path       String
+  ip         String?
+  platform   String?
+  deviceName String?
+  appVersion String?
+  createdAt  DateTime @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull, name: "UserActionLogs")
+
+  @@index([userId])
+  @@index([action])
+  @@map("actionLogs")
+}
+
+// enums
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+}
+
+enum LicenceType {
+  FREE
+  INVITE_ONLY
+  GEOTIME
+}
+
+enum EventPrivacy {
+  PUBLIC
+  PRIVATE
+}
+
+enum EventStatus {
+  CREATED
+  VOTING
+  PLAYING
+  FINISHED
+}
+
+enum Subscription {
+  FREE
+  PREMIUM
+}
+
+enum PlaylistEditPolicy {
+  EVERYONE
+  INVITED_ONLY
+}
+
+enum PlaylistVisibility {
+  PUBLIC
+  PRIVATE
+}
